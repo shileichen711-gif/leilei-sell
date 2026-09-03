@@ -5,17 +5,91 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const STORAGE_KEY = "alalei-product-studio-v1";
 const SETTINGS_KEY = "alalei-product-studio-settings-v1";
 const MARKET_STORAGE_KEY = "alalei-product-studio-markets-v1";
+const CATALOG_MIGRATION_KEY = "alalei-product-catalog-2026-09-v1";
 
 const STATUS = {
   idea: { label: "想法池", color: "#777268" },
   drawing: { label: "绘制中", color: "#cb6f4e" },
   proofing: { label: "打样中", color: "#a273b0" },
   producing: { label: "生产中", color: "#497e86" },
-  ready: { label: "已完成", color: "#4f765b" },
+  ready: { label: "已完成生产", color: "#4f765b" },
   paused: { label: "暂缓", color: "#a29c91" },
 };
 
 const CATEGORIES = ["配饰", "纸品", "印章", "版画", "贴纸", "服装", "其他"];
+
+const CATALOG_STAGE = {
+  existing: { label: "已有成品", color: "#4f765b" },
+  new: { label: "本轮新品", color: "#d56f51" },
+  candidate: { label: "候补 / 后续", color: "#8b765d" },
+  creative: { label: "创作记录", color: "#557c84" },
+};
+
+const LAUNCH_PRIORITY = {
+  keep: "继续售卖",
+  must: "9/25 必做",
+  recommended: "本轮推荐",
+  optional: "有时间再做",
+  later: "暂缓",
+  nonSku: "不算 SKU",
+};
+
+function catalogItem(id, series, name, category, catalogStage, launchPriority, artNeeded, artPlan, notes, aliases = []) {
+  const priority = launchPriority === "must" ? 5 : launchPriority === "recommended" ? 4 : launchPriority === "keep" ? 3 : launchPriority === "optional" ? 2 : 1;
+  return {
+    id: `catalog-${id}`,
+    name,
+    series,
+    category,
+    catalogStage,
+    launchPriority,
+    status: catalogStage === "existing" ? "ready" : catalogStage === "candidate" ? "paused" : catalogStage === "creative" ? "drawing" : "idea",
+    priority,
+    artNeeded,
+    artDone: catalogStage === "existing" ? artNeeded : 0,
+    artPlan,
+    designHours: 0,
+    hoursDone: 0,
+    productionDays: 0,
+    unitCost: 0,
+    fixedCost: 0,
+    price: 0,
+    plannedQty: 0,
+    stock: 0,
+    selfMade: false,
+    deadline: "2026-09-25",
+    notes,
+    aliases,
+  };
+}
+
+const CATALOG_IMPORT = [
+  catalogItem("onsen-riso", "温泉", "温泉大图 Riso", "纸品", "existing", "keep", 0, "已有温泉大图", "销量表现可以，继续卖。"),
+  catalogItem("onsen-badge-1", "温泉", "温泉吧唧①", "配饰", "existing", "keep", 0, "已有衍生图", "已有成品，继续卖。"),
+  catalogItem("onsen-badge-2", "温泉", "温泉吧唧②", "配饰", "existing", "keep", 0, "已有衍生图", "已有成品，继续卖。"),
+  catalogItem("onsen-badge-3", "温泉", "温泉吧唧③", "配饰", "existing", "keep", 0, "已有衍生图", "已有成品，继续卖。"),
+  catalogItem("onsen-key-tag", "温泉", "温泉旅馆钥匙牌", "配饰", "new", "must", 0, "已有角色转线稿 / 符号", "明天先画版式；木质激光雕刻。"),
+  catalogItem("moon-onsen-memo", "温泉", "月见温泉便签", "纸品", "new", "recommended", 1, "月亮＋泡汤角色", "有中秋限定感，之后也能继续卖。"),
+  catalogItem("milk-charm-3d", "温泉", "3D 牛奶挂件", "配饰", "candidate", "later", 0, "已有牛奶元素；主要工作是建模", "候补项目，这轮暂缓。"),
+  catalogItem("circus-riso", "马戏团", "马戏团 Riso", "纸品", "existing", "keep", 0, "已有图稿", "已有成品，继续卖。"),
+  catalogItem("circus-sticker-1", "马戏团", "马戏团贴纸①", "贴纸", "existing", "keep", 0, "已有图稿", "已有成品，继续卖。"),
+  catalogItem("circus-pastel-sticker", "马戏团", "色粉手绘贴纸②", "贴纸", "new", "must", 1, "全新色粉手绘", "可融入月亮和四叶草。"),
+  catalogItem("circus-paper-pack", "马戏团", "Circus Paper Pack", "纸品", "new", "recommended", 0, "复用 Riso＋新色粉图", "门票、节目单、演员证等。"),
+  catalogItem("circus-stamp", "马戏团", "马戏团印章", "印章", "new", "recommended", 0, "从已有角色提炼线稿", "ADMIT ONE / Lucky Circus。"),
+  catalogItem("angel-sticker", "天使合唱团", "天使全切贴纸", "贴纸", "existing", "keep", 0, "已有图稿", "系列基础，继续卖。"),
+  catalogItem("lucky-angel-omamori", "天使合唱团", "幸运天使御守", "配饰", "new", "must", 0, "复用现有天使", "加入四叶草元素。"),
+  catalogItem("moonlight-hymn", "天使合唱团", "Moonlight Hymn 圣歌便签", "纸品", "new", "recommended", 1, "月亮＋唱歌天使", "新图可同时服务其他 SKU。"),
+  catalogItem("angel-ex-libris", "天使合唱团", "EX LIBRIS 藏书票", "版画", "new", "recommended", 1, "天使＋书＋乐谱", "建议画成版画感。"),
+  catalogItem("angel-paper-pack", "天使合唱团", "合唱团 Paper Pack", "纸品", "candidate", "optional", 0, "复用圣歌便签和藏书票新图", "圣歌纸、成员证、祝福卡；有时间再做。"),
+  catalogItem("mini-hymnal", "天使合唱团", "Mini Hymnal", "纸品", "candidate", "later", 0, "以后复用上述图稿", "后续项目，这轮不增加工作量。"),
+  catalogItem("dessert-riso", "甜品", "冰沙 Riso", "纸品", "existing", "keep", 0, "已有图稿", "甜品系列起点，继续卖。", ["刨冰 RISO 海报套装"]),
+  catalogItem("dessert-sticker", "甜品", "冰沙贴纸", "贴纸", "existing", "keep", 0, "已有图稿", "已有成品，继续卖。"),
+  catalogItem("dessert-memo", "甜品", "冰沙便签", "纸品", "new", "must", 0, "直接复用冰沙图", "排版为主，可以较快完成。"),
+  catalogItem("moon-dessert-sticker", "甜品", "月见甜品贴纸", "贴纸", "new", "recommended", 1, "新甜品柄图；布丁 / 圣代二选一", "本轮推荐新品。"),
+  catalogItem("dessert-journal-pages", "甜品", "甜品手帐内页", "纸品", "new", "recommended", 0, "复用冰沙＋月见甜品图", "以排版工作为主。"),
+  catalogItem("dessert-tape", "甜品", "甜品胶带", "纸品", "candidate", "later", 0, "等待甜品图稿积累", "后续再做，暂时不赶 MOQ 和打样。"),
+  catalogItem("penguin-diary", "企鹅生活", "生活记录漫画", "其他", "creative", "nonSku", 0, "随日常持续绘制", "暂时不商品化；不计入 SKU、成本和利润。"),
+];
 
 const SAMPLE_PRODUCTS = [
   {
@@ -150,10 +224,13 @@ const EMPTY_PRODUCT = {
   name: "",
   series: "",
   category: "其他",
+  catalogStage: "new",
+  launchPriority: "recommended",
   status: "idea",
   priority: 3,
   artNeeded: 1,
   artDone: 0,
+  artPlan: "",
   designHours: 4,
   hoursDone: 0,
   productionDays: 7,
@@ -162,6 +239,8 @@ const EMPTY_PRODUCT = {
   price: 0,
   plannedQty: 20,
   stock: 0,
+  restockThreshold: 5,
+  restockTarget: 20,
   selfMade: false,
   deadline: "2026-09-25",
   notes: "",
@@ -174,7 +253,7 @@ const EMPTY_MARKET = {
   endDate: "2026-09-01",
   status: "planning",
   orders: 0,
-  syncInventory: false,
+  syncInventory: true,
   inventoryDeductions: {},
   sales: [],
   expenses: [
@@ -195,12 +274,91 @@ function productSeries(product) {
   return series || "未分类";
 }
 
+function productCatalogStage(product) {
+  if (product?.catalogStage && CATALOG_STAGE[product.catalogStage]) return product.catalogStage;
+  if (product?.status === "ready" || number(product?.stock) > 0) return "existing";
+  if (product?.status === "paused") return "candidate";
+  return "new";
+}
+
+function isSkuProduct(product) {
+  return productCatalogStage(product) !== "creative";
+}
+
+function hasFinancialData(product) {
+  return number(product?.price) > 0;
+}
+
+function getReservedInventory(markets = [], excludeMarketId = "") {
+  return markets
+    .filter((market) => market.status !== "closed" && market.id !== excludeMarketId)
+    .reduce((result, market) => {
+      for (const row of market.sales || []) {
+        const reservedFromStock = Math.max(0, number(row.broughtQty) - number(row.newQty));
+        result[row.productId] = (result[row.productId] || 0) + reservedFromStock;
+      }
+      return result;
+    }, {});
+}
+
+function getInventoryState(product, reservations = {}) {
+  const total = number(product?.stock);
+  const reserved = number(reservations[product?.id]);
+  const remaining = total - reserved;
+  return {
+    total,
+    reserved,
+    available: Math.max(0, remaining),
+    shortage: Math.max(0, -remaining),
+  };
+}
+
+function normalizeProduct(product) {
+  const catalogStage = productCatalogStage(product);
+  return {
+    ...product,
+    series: typeof product.series === "string" ? product.series : "",
+    catalogStage,
+    launchPriority: product.launchPriority || (catalogStage === "existing" ? "keep" : catalogStage === "candidate" ? "later" : "recommended"),
+    artPlan: typeof product.artPlan === "string" ? product.artPlan : "",
+    restockThreshold: product.restockThreshold == null ? 5 : number(product.restockThreshold),
+    restockTarget: product.restockTarget == null ? Math.max(number(product.plannedQty), number(product.stock), 20) : number(product.restockTarget),
+  };
+}
+
+function mergeCatalogProducts(products) {
+  const merged = products.map(normalizeProduct);
+  let added = 0;
+  for (const catalogProduct of CATALOG_IMPORT) {
+    const names = [catalogProduct.name, ...(catalogProduct.aliases || [])].map((name) => name.toLocaleLowerCase("zh-CN"));
+    const existingIndex = merged.findIndex((product) => product.id === catalogProduct.id || names.includes(product.name.trim().toLocaleLowerCase("zh-CN")));
+    const { aliases, ...catalogFields } = catalogProduct;
+    if (existingIndex >= 0) {
+      const current = merged[existingIndex];
+      merged[existingIndex] = {
+        ...current,
+        series: current.series || catalogFields.series,
+        catalogStage: catalogFields.catalogStage,
+        launchPriority: catalogFields.launchPriority,
+        artPlan: current.artPlan || catalogFields.artPlan,
+        notes: current.notes || catalogFields.notes,
+      };
+    } else {
+      merged.push(catalogFields);
+      added += 1;
+    }
+  }
+  return { products: merged, added };
+}
+
 function money(value) {
+  const amount = number(value);
   return new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency: "CNY",
-    maximumFractionDigits: 0,
-  }).format(number(value));
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 }
 
 function daysUntil(dateString) {
@@ -241,14 +399,16 @@ function getMetrics(product, dailyHours = 2) {
   const neededDays = Math.ceil(remainingHours / Math.max(0.25, dailyHours)) + (product.status === "ready" ? 0 : product.productionDays);
   const daysLeft = daysUntil(product.deadline);
   const buffer = daysLeft - neededDays;
+  const schedulePending = product.status !== "ready" && product.status !== "paused" && number(product.designHours) === 0 && number(product.productionDays) === 0;
   let risk = "safe";
   if (product.status === "paused") risk = "paused";
+  else if (schedulePending) risk = "pending";
   else if (product.status !== "ready" && buffer < 0) risk = "late";
   else if (product.status !== "ready" && buffer <= 3) risk = "tight";
   const artProgress = product.artNeeded > 0 ? Math.min(1, product.artDone / product.artNeeded) : 1;
   const hourProgress = product.designHours > 0 ? Math.min(1, product.hoursDone / product.designHours) : 1;
   const progress = product.status === "ready" ? 1 : (artProgress + hourProgress) / 2;
-  return { contribution, breakEvenUnits, breakEvenSales, revenue, totalCost, profit, margin, remainingHours, neededDays, daysLeft, buffer, risk, progress };
+  return { contribution, breakEvenUnits, breakEvenSales, revenue, totalCost, profit, margin, remainingHours, neededDays, daysLeft, buffer, risk, progress, schedulePending };
 }
 
 function Icon({ name, size = 18 }) {
@@ -285,6 +445,7 @@ function StatCard({ eyebrow, value, note, tone, children }) {
 function RiskBadge({ risk, buffer, daysLeft }) {
   const klass = risk;
   if (risk === "paused") return <span className="risk paused">已暂缓</span>;
+  if (risk === "pending") return <span className="risk pending">排期待补<em>填写绘制与生产时间</em></span>;
   const scheduleText = buffer < 0
     ? `预计延期 ${Math.abs(buffer)} 天`
     : buffer <= 3
@@ -298,31 +459,39 @@ function RiskBadge({ risk, buffer, daysLeft }) {
   return <span className={`risk ${klass}`}>{scheduleText}<em>{deadlineText}</em></span>;
 }
 
+function CatalogBadge({ product }) {
+  const stage = CATALOG_STAGE[productCatalogStage(product)];
+  const priority = LAUNCH_PRIORITY[product.launchPriority];
+  return <span className="catalog-badges"><i style={{ "--catalog": stage.color }}>{stage.label}</i>{priority && <em>{priority}</em>}</span>;
+}
+
 function ProgressRing({ value }) {
   const progress = Math.round(value * 100);
   return <div className="progress-ring" style={{ "--progress": `${progress * 3.6}deg` }}><span>{progress}%</span></div>;
 }
 
-function ProductRow({ product, dailyHours, onEdit, onDuplicate, onDelete }) {
+function ProductRow({ product, dailyHours, reservations, onEdit, onDuplicate, onDelete }) {
   const metrics = getMetrics(product, dailyHours);
+  const inventory = getInventoryState(product, reservations);
   const [menu, setMenu] = useState(false);
   return (
-    <div className="product-row">
+    <div className={`product-row catalog-${productCatalogStage(product)} status-${product.status}`}>
       <div className="product-main">
         <ProgressRing value={metrics.progress} />
         <div>
           <div className="name-line">
             <button className="product-name" onClick={() => onEdit(product)}>{product.name}</button>
-            <span className="status-dot" style={{ "--status": STATUS[product.status].color }}>{STATUS[product.status].label}</span>
+            <span className={`status-dot ${product.status === "ready" ? "complete-status" : ""}`} style={{ "--status": STATUS[product.status].color }}>{STATUS[product.status].label}</span>
           </div>
           <div className="product-meta">
-            <span className="series-label">{productSeries(product)}</span><span>·</span><span>{product.category}</span><span>·</span><span>{product.selfMade ? "可独立制作" : "厂家生产"}</span><span>·</span><span>{product.artDone}/{product.artNeeded} 个柄图</span>
+            <CatalogBadge product={product} /><span className="series-label">{productSeries(product)}</span><span>·</span><span>{product.category}</span><span>·</span><span>{product.artNeeded ? `${product.artDone}/${product.artNeeded} 个柄图` : "复用已有图稿"}</span>
           </div>
         </div>
       </div>
-      <div className="product-number"><small>投入成本</small><b>{money(metrics.totalCost)}</b></div>
-      <div className="product-number"><small>售价 / 毛利率</small><b>{money(product.price)} <i>{Math.round(metrics.margin * 100)}%</i></b></div>
-      <div className="product-number"><small>现金回本</small><b>{metrics.breakEvenUnits === null ? "—" : `${metrics.breakEvenUnits} 件`}</b></div>
+      <div className={`product-number inventory-number ${inventory.reserved > 0 ? "reserved" : ""}`}><small>可用库存</small><b>{inventory.available} 件</b>{inventory.reserved > 0 && <em>集市占用 {inventory.reserved} 件</em>}</div>
+      <div className="product-number"><small>投入成本</small><b>{!isSkuProduct(product) ? "不计入" : hasFinancialData(product) ? money(metrics.totalCost) : "待补"}</b></div>
+      <div className="product-number"><small>售价 / 毛利率</small><b>{!isSkuProduct(product) ? "不计入" : hasFinancialData(product) ? <>{money(product.price)} <i>{Math.round(metrics.margin * 100)}%</i></> : "待补"}</b></div>
+      <div className="product-number"><small>现金回本</small><b>{!isSkuProduct(product) ? "不计入" : !hasFinancialData(product) ? "待补" : metrics.breakEvenUnits === null ? "—" : `${metrics.breakEvenUnits} 件`}</b></div>
       <div className="product-risk"><RiskBadge risk={metrics.risk} buffer={metrics.buffer} daysLeft={metrics.daysLeft} /></div>
       <div className="row-actions">
         <button className="icon-btn" aria-label="更多操作" onClick={() => setMenu(!menu)}><Icon name="more" /></button>
@@ -336,20 +505,22 @@ function ProductRow({ product, dailyHours, onEdit, onDuplicate, onDelete }) {
   );
 }
 
-function ProductCard({ product, dailyHours, onEdit }) {
+function ProductCard({ product, dailyHours, reservations, onEdit }) {
   const m = getMetrics(product, dailyHours);
+  const inventory = getInventoryState(product, reservations);
   return (
-    <button className="mobile-product" onClick={() => onEdit(product)}>
+    <button className={`mobile-product catalog-${productCatalogStage(product)} status-${product.status}`} onClick={() => onEdit(product)}>
       <div className="mobile-card-head">
-        <div><span className="mini-category">{productSeries(product)} / {product.category}</span><h3>{product.name}</h3></div>
+        <div><CatalogBadge product={product} /><span className="mini-category">{productSeries(product)} / {product.category}</span><h3>{product.name}</h3></div>
         <ProgressRing value={m.progress} />
       </div>
       <div className="mobile-card-numbers">
-        <span><small>售价</small><b>{money(product.price)}</b></span>
-        <span><small>预计利润</small><b>{money(m.profit)}</b></span>
-        <span><small>现金回本</small><b>{m.breakEvenUnits === null ? "—" : `${m.breakEvenUnits} 件`}</b></span>
+        <span className={inventory.reserved > 0 ? "reserved" : ""}><small>可用库存</small><b>{inventory.available} 件</b>{inventory.reserved > 0 && <em>集市占用 {inventory.reserved}</em>}</span>
+        <span><small>售价</small><b>{!isSkuProduct(product) ? "不计入" : hasFinancialData(product) ? money(product.price) : "待补"}</b></span>
+        <span><small>预计利润</small><b>{!isSkuProduct(product) ? "不计入" : hasFinancialData(product) ? money(m.profit) : "待补"}</b></span>
+        <span><small>现金回本</small><b>{!isSkuProduct(product) ? "不计入" : !hasFinancialData(product) ? "待补" : m.breakEvenUnits === null ? "—" : `${m.breakEvenUnits} 件`}</b></span>
       </div>
-      <div className="mobile-card-foot"><span style={{ color: STATUS[product.status].color }}>{STATUS[product.status].label}</span><RiskBadge risk={m.risk} buffer={m.buffer} daysLeft={m.daysLeft} /></div>
+      <div className="mobile-card-foot"><span className={product.status === "ready" ? "complete-status" : ""} style={{ color: STATUS[product.status].color }}>{product.status === "ready" && "✓ "}{STATUS[product.status].label}</span><RiskBadge risk={m.risk} buffer={m.buffer} daysLeft={m.daysLeft} /></div>
     </button>
   );
 }
@@ -376,12 +547,15 @@ function ProductEditor({ product, seriesOptions = [], onClose, onSave, onDelete 
           <div className="form-grid">
             <div className="field"><label>所属系列</label><input list="product-series-options" value={draft.series || ""} onChange={(e) => update("series", e.target.value)} placeholder="例如：温泉" /><datalist id="product-series-options">{seriesOptions.map((series) => <option value={series} key={series} />)}</datalist></div>
             <div className="field"><label>品类</label><select value={draft.category} onChange={(e) => update("category", e.target.value)}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
+            <div className="field"><label>产品阶段</label><select value={draft.catalogStage} onChange={(e) => update("catalogStage", e.target.value)}>{Object.entries(CATALOG_STAGE).map(([key, value]) => <option value={key} key={key}>{value.label}</option>)}</select></div>
+            <div className="field"><label>本轮定位</label><select value={draft.launchPriority} onChange={(e) => update("launchPriority", e.target.value)}>{Object.entries(LAUNCH_PRIORITY).map(([key, value]) => <option value={key} key={key}>{value}</option>)}</select></div>
             <div className="field"><label>制作状态</label><select value={draft.status} onChange={(e) => update("status", e.target.value)}>{Object.entries(STATUS).map(([key, val]) => <option key={key} value={key}>{val.label}</option>)}</select></div>
             <div className="field"><label>优先级</label><select value={draft.priority} onChange={(e) => update("priority", number(e.target.value))}>{[5, 4, 3, 2, 1].map((p) => <option key={p} value={p}>{"★".repeat(p)}{p === 5 ? " 最高" : ""}</option>)}</select></div>
             <div className="field"><label>完成期限</label><input type="date" value={draft.deadline} onChange={(e) => update("deadline", e.target.value)} /></div>
           </div>
 
           <div className="form-section-title"><span>图稿与时间</span><i /></div>
+          <div className="field wide"><label>图稿方案</label><input value={draft.artPlan || ""} onChange={(e) => update("artPlan", e.target.value)} placeholder="例如：复用现有天使＋四叶草" /></div>
           <div className="form-grid three">
             <NumberField label="所需柄图" value={draft.artNeeded} onChange={(v) => update("artNeeded", v)} suffix="个" />
             <NumberField label="已完成柄图" value={draft.artDone} onChange={(v) => update("artDone", v)} suffix="个" />
@@ -393,11 +567,13 @@ function ProductEditor({ product, seriesOptions = [], onClose, onSave, onDelete 
 
           <div className="form-section-title"><span>成本与售价</span><i /></div>
           <div className="form-grid three">
-            <NumberField label="单件成本" value={draft.unitCost} onChange={(v) => update("unitCost", v)} prefix="¥" step="0.1" />
-            <NumberField label="固定成本" value={draft.fixedCost} onChange={(v) => update("fixedCost", v)} prefix="¥" step="0.1" />
-            <NumberField label="预计售价" value={draft.price} onChange={(v) => update("price", v)} prefix="¥" step="0.1" />
+            <NumberField label="单件成本" value={draft.unitCost} onChange={(v) => update("unitCost", v)} prefix="¥" step="0.01" />
+            <NumberField label="固定成本" value={draft.fixedCost} onChange={(v) => update("fixedCost", v)} prefix="¥" step="0.01" />
+            <NumberField label="预计售价" value={draft.price} onChange={(v) => update("price", v)} prefix="¥" step="0.01" />
             <NumberField label="首批数量" value={draft.plannedQty} onChange={(v) => update("plannedQty", v)} suffix="件" />
-            <NumberField label="现有库存" value={draft.stock} onChange={(v) => update("stock", v)} suffix="件" />
+            <NumberField label="现有总库存" value={draft.stock} onChange={(v) => update("stock", v)} suffix="件" />
+            <NumberField label="补货提醒线" value={draft.restockThreshold ?? 5} onChange={(v) => update("restockThreshold", v)} suffix="件" />
+            <NumberField label="补货目标库存" value={draft.restockTarget ?? draft.plannedQty} onChange={(v) => update("restockTarget", v)} suffix="件" />
           </div>
           <div className={`live-calc ${metrics.profit < 0 ? "negative" : ""}`}>
             <span><small>首批投入</small><b>{money(metrics.totalCost)}</b></span>
@@ -416,20 +592,22 @@ function ProductEditor({ product, seriesOptions = [], onClose, onSave, onDelete 
 }
 
 function NumberField({ label, value, onChange, prefix, suffix, step = "1" }) {
-  return <div className="field"><label>{label}</label><div className="affix-input">{prefix && <span>{prefix}</span>}<input type="number" min="0" step={step} value={value} onFocus={(e) => e.target.select()} onChange={(e) => onChange(e.target.value === "" ? "" : number(e.target.value))} />{suffix && <span>{suffix}</span>}</div></div>;
+  return <div className="field"><label>{label}</label><div className="affix-input">{prefix && <span>{prefix}</span>}<input type="number" inputMode={step === "1" ? "numeric" : "decimal"} min="0" step={step} value={value} onFocus={(e) => e.target.select()} onChange={(e) => onChange(e.target.value === "" ? "" : number(e.target.value))} />{suffix && <span>{suffix}</span>}</div></div>;
 }
 
 function Dashboard({ products, dailyHours, onOpenProduct, onNavigate }) {
-  const data = useMemo(() => products.map((p) => ({ product: p, ...getMetrics(p, dailyHours) })), [products, dailyHours]);
+  const skuProducts = useMemo(() => products.filter(isSkuProduct), [products]);
+  const data = useMemo(() => skuProducts.map((p) => ({ product: p, ...getMetrics(p, dailyHours) })), [skuProducts, dailyHours]);
   const active = data.filter((d) => !["ready", "paused"].includes(d.product.status));
   const seriesCount = new Set(products.map(productSeries).filter((series) => series !== "未分类")).size;
   const totalBudget = active.reduce((sum, d) => sum + d.totalCost, 0);
   const projectedProfit = data.reduce((sum, d) => sum + d.profit, 0);
   const late = active.filter((d) => d.risk === "late");
+  const pendingSchedule = active.filter((d) => d.risk === "pending");
   const completed = data.filter((d) => d.product.status === "ready").length;
   const best = [...data].filter((d) => d.profit > 0).sort((a, b) => b.profit - a.profit)[0];
   const next = [...active].sort((a, b) => {
-    const riskScore = { late: 3, tight: 2, safe: 1 };
+    const riskScore = { pending: 4, late: 3, tight: 2, safe: 1 };
     return (riskScore[b.risk] - riskScore[a.risk]) || (b.product.priority - a.product.priority) || (a.daysLeft - b.daysLeft);
   })[0];
   return <section className="view">
@@ -441,7 +619,7 @@ function Dashboard({ products, dailyHours, onOpenProduct, onNavigate }) {
       <StatCard eyebrow="进行中产品" value={`${active.length} 个`} note={seriesCount ? `分属 ${seriesCount} 个系列 · ${completed} 个已完成` : `尚未建立系列 · ${completed} 个已完成`} tone="paper"><span className="stat-mark">01</span></StatCard>
       <StatCard eyebrow="预计首批投入" value={money(totalBudget)} note="包含固定成本与首批制作" tone="sand"><span className="stat-mark">02</span></StatCard>
       <StatCard eyebrow="全产品预计利润" value={money(projectedProfit)} note="按计划数量全部售出计算" tone="sage"><span className="stat-mark">03</span></StatCard>
-      <StatCard eyebrow="时间风险" value={late.length ? `${late.length} 个需调整` : "排期正常"} note={late.length ? "剩余时间少于制作所需时间" : "当前项目均有时间余量"} tone={late.length ? "coral" : "blue"}><span className="stat-mark">04</span></StatCard>
+      <StatCard eyebrow="时间风险" value={late.length ? `${late.length} 个需调整` : pendingSchedule.length ? `${pendingSchedule.length} 个待补排期` : "排期正常"} note={late.length ? "剩余时间少于制作所需时间" : pendingSchedule.length ? "先填写绘制时间和生产等待" : "当前项目均有时间余量"} tone={late.length ? "coral" : "blue"}><span className="stat-mark">04</span></StatCard>
     </div>
     <div className="dashboard-grid">
       <article className="panel focus-panel">
@@ -470,7 +648,7 @@ function Dashboard({ products, dailyHours, onOpenProduct, onNavigate }) {
       <div className="panel-head"><div><span className="section-kicker">PIPELINE</span><h2>开发进度</h2></div><button className="link-btn" onClick={() => onNavigate("products")}>查看全部 <Icon name="arrow" size={15} /></button></div>
       <div className="pipeline">
         {Object.entries(STATUS).filter(([key]) => key !== "paused").map(([key, item]) => {
-          const count = products.filter((p) => p.status === key).length;
+          const count = skuProducts.filter((p) => p.status === key).length;
           return <div className="pipeline-item" key={key}><span style={{ "--status": item.color }} /><b>{count}</b><small>{item.label}</small></div>;
         })}
       </div>
@@ -479,10 +657,10 @@ function Dashboard({ products, dailyHours, onOpenProduct, onNavigate }) {
 }
 
 function DevelopmentTabs({ current, onNavigate }) {
-  return <div className="development-tabs"><button className={current === "products" ? "active" : ""} onClick={() => onNavigate("products")}>产品池</button><button className={current === "planner" ? "active" : ""} onClick={() => onNavigate("planner")}>时间规划</button></div>;
+  return <div className="development-tabs"><button className={current === "skus" ? "active" : ""} onClick={() => onNavigate("skus")}>全部 SKU</button><button className={current === "products" ? "active" : ""} onClick={() => onNavigate("products")}>开发池</button><button className={current === "restock" ? "active" : ""} onClick={() => onNavigate("restock")}>补货池</button><button className={current === "planner" ? "active" : ""} onClick={() => onNavigate("planner")}>时间规划</button></div>;
 }
 
-function SeriesBoard({ products, seriesNames, onOpenProduct, onMoveSeries }) {
+function SeriesBoard({ products, seriesNames, reservations, onOpenProduct, onMoveSeries }) {
   const [draggedId, setDraggedId] = useState("");
   const [dropTarget, setDropTarget] = useState("");
   const [newSeries, setNewSeries] = useState("");
@@ -511,13 +689,15 @@ function SeriesBoard({ products, seriesNames, onOpenProduct, onMoveSeries }) {
       {columns.map((series) => {
         const items = products.filter((product) => productSeries(product) === series);
         return <section className={`series-column ${dropTarget === series ? "drop-ready" : ""}`} key={series} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTarget(series); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTarget(""); }} onDrop={(event) => dropProduct(event, series)}>
-          <header><div><span>SERIES</span><h2>{series}</h2></div><b>{items.length} SKU</b></header>
+          <header><div><span>SERIES</span><h2>{series}</h2></div><b>{items.filter(isSkuProduct).length} SKU</b></header>
           <div className="series-column-list">
-            {items.map((product) => <article className={`sku-drag-card ${draggedId === product.id ? "dragging" : ""}`} draggable key={product.id} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", product.id); setDraggedId(product.id); }} onDragEnd={() => { setDraggedId(""); setDropTarget(""); }}>
+            {items.map((product) => {
+              const inventory = getInventoryState(product, reservations);
+              return <article className={`sku-drag-card status-${product.status} ${draggedId === product.id ? "dragging" : ""}`} draggable key={product.id} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", product.id); setDraggedId(product.id); }} onDragEnd={() => { setDraggedId(""); setDropTarget(""); }}>
               <div className="sku-drag-head"><span className="drag-handle" aria-hidden="true">⋮⋮</span><button type="button" onClick={() => onOpenProduct(product)}>{product.name}</button></div>
-              <p>{product.category} · 库存 {number(product.stock)} 件</p>
-              <div className="sku-drag-foot"><span style={{ "--status": STATUS[product.status].color }}>{STATUS[product.status].label}</span><label>移动到<select value={productSeries(product)} onChange={(event) => onMoveSeries(product.id, event.target.value)}>{columns.map((name) => <option value={name} key={name}>{name}</option>)}</select></label></div>
-            </article>)}
+              <CatalogBadge product={product} /><p>{product.category} · {isSkuProduct(product) ? `可用 ${inventory.available} 件${inventory.reserved > 0 ? ` · 集市占用 ${inventory.reserved}` : ""}` : "不计入商品统计"}</p>
+              <div className="sku-drag-foot"><span className={product.status === "ready" ? "complete-status" : ""} style={{ "--status": STATUS[product.status].color }}>{product.status === "ready" && "✓ "}{STATUS[product.status].label}</span><label>移动到<select value={productSeries(product)} onChange={(event) => onMoveSeries(product.id, event.target.value)}>{columns.map((name) => <option value={name} key={name}>{name}</option>)}</select></label></div>
+            </article>})}
             {!items.length && <div className="series-drop-empty">拖动 SKU 到这里</div>}
           </div>
         </section>;
@@ -526,15 +706,20 @@ function SeriesBoard({ products, seriesNames, onOpenProduct, onMoveSeries }) {
   </div>;
 }
 
-function ProductList({ products, dailyHours, onOpenProduct, onDuplicate, onDelete, onMoveSeries, onNavigate }) {
+function ProductList({ products, markets, dailyHours, onOpenProduct, onDuplicate, onDelete, onMoveSeries, onNavigate }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("priority");
   const [series, setSeries] = useState("all");
+  const [catalogFilter, setCatalogFilter] = useState("all");
   const [mode, setMode] = useState("list");
+  const developmentProducts = useMemo(() => products.filter((product) => product.status !== "ready"), [products]);
+  const skuProducts = useMemo(() => developmentProducts.filter(isSkuProduct), [developmentProducts]);
+  const reservations = useMemo(() => getReservedInventory(markets), [markets]);
+  const stageCounts = useMemo(() => Object.fromEntries(Object.keys(CATALOG_STAGE).map((key) => [key, developmentProducts.filter((product) => productCatalogStage(product) === key).length])), [developmentProducts]);
   const seriesStats = useMemo(() => {
-    const grouped = products.reduce((result, product) => {
+    const grouped = skuProducts.reduce((result, product) => {
       const name = productSeries(product);
       if (!result[name]) result[name] = [];
       result[name].push(product);
@@ -543,17 +728,19 @@ function ProductList({ products, dailyHours, onOpenProduct, onDuplicate, onDelet
     return Object.entries(grouped).map(([name, items]) => ({
       name,
       skuCount: items.length,
-      stock: items.reduce((sum, product) => sum + number(product.stock), 0),
+      available: items.reduce((sum, product) => sum + getInventoryState(product, reservations).available, 0),
+      reserved: items.reduce((sum, product) => sum + getInventoryState(product, reservations).reserved, 0),
       profit: items.reduce((sum, product) => sum + getMetrics(product, dailyHours).profit, 0),
     })).sort((a, b) => a.name === "未分类" ? 1 : b.name === "未分类" ? -1 : a.name.localeCompare(b.name, "zh-CN"));
-  }, [products, dailyHours]);
+  }, [skuProducts, reservations, dailyHours]);
   const baseFiltered = useMemo(() => {
-    const list = products.filter((p) => {
+    const list = developmentProducts.filter((p) => {
       const m = getMetrics(p, dailyHours);
       const matchesQuery = p.name.toLowerCase().includes(query.toLowerCase()) || p.category.includes(query) || productSeries(p).toLowerCase().includes(query.toLowerCase());
       const matchesStatus = status === "all" || p.status === status;
+      const matchesCatalog = catalogFilter === "all" || productCatalogStage(p) === catalogFilter;
       const matchesSpecial = filter === "all" || (filter === "self" && p.selfMade) || (filter === "factory" && !p.selfMade) || (filter === "risk" && ["late", "tight"].includes(m.risk)) || (filter === "profitable" && m.profit > 0);
-      return matchesQuery && matchesStatus && matchesSpecial;
+      return matchesQuery && matchesStatus && matchesCatalog && matchesSpecial;
     });
     return list.sort((a, b) => {
       if (sort === "priority") return b.priority - a.priority;
@@ -562,39 +749,152 @@ function ProductList({ products, dailyHours, onOpenProduct, onDuplicate, onDelet
       if (sort === "progress") return getMetrics(b, dailyHours).progress - getMetrics(a, dailyHours).progress;
       return 0;
     });
-  }, [products, query, status, filter, sort, dailyHours]);
+  }, [developmentProducts, query, status, catalogFilter, filter, sort, dailyHours]);
   const filtered = useMemo(() => series === "all" ? baseFiltered : baseFiltered.filter((product) => productSeries(product) === series), [baseFiltered, series]);
   const shownCount = mode === "board" ? baseFiltered.length : filtered.length;
   return <section className="view">
-    <div className="view-title-row compact"><div className="title-block"><div className="issue-line"><span>INDEX</span><i /><em>{String(products.length).padStart(2, "0")} SKU</em></div><span className="section-kicker">PRODUCT POOL / 产品档案</span><h1>产品池</h1><p>{shownCount} / {products.length} 个 SKU 符合当前条件</p></div><button className="primary-btn desktop-cta" onClick={() => onOpenProduct(null)}><Icon name="plus" />添加产品</button></div>
+    <div className="view-title-row compact"><div className="title-block"><div className="issue-line"><span>IN DEVELOPMENT</span><i /><em>{String(skuProducts.length).padStart(2, "0")} SKU</em></div><span className="section-kicker">PRODUCT DEVELOPMENT / 产品档案</span><h1>产品开发池</h1><p>当前显示 {shownCount} 条记录 · 标记为“已完成生产”后自动移入补货池</p></div><button className="primary-btn desktop-cta" onClick={() => onOpenProduct(null)}><Icon name="plus" />添加产品</button></div>
     <div className="product-view-row"><DevelopmentTabs current="products" onNavigate={onNavigate} /><div className="product-view-switch" aria-label="产品池查看方式"><button className={mode === "list" ? "active" : ""} onClick={() => setMode("list")}>列表</button><button className={mode === "board" ? "active" : ""} onClick={() => { setMode("board"); setSeries("all"); }}>拖动分类</button></div></div>
+    <div className="catalog-stage-tabs" aria-label="按产品阶段筛选">
+      <button className={catalogFilter === "all" ? "active" : ""} onClick={() => { setCatalogFilter("all"); setSeries("all"); }}><span>全部记录</span><b>{developmentProducts.length}</b></button>
+      {Object.entries(CATALOG_STAGE).map(([key, value]) => <button className={catalogFilter === key ? `active stage-${key}` : `stage-${key}`} onClick={() => { setCatalogFilter(key); setSeries("all"); }} key={key}><span>{value.label}</span><b>{stageCounts[key]}</b></button>)}
+    </div>
     {mode === "list" && <div className="series-overview" aria-label="按系列查看 SKU">
       <button className={`series-card series-card-all ${series === "all" ? "active" : ""}`} onClick={() => setSeries("all")} aria-pressed={series === "all"}>
-        <span>全部系列</span><b>{products.length}<small> SKU</small></b><em>{seriesStats.filter((item) => item.name !== "未分类").length} 个系列</em>
+        <span>全部系列</span><b>{skuProducts.length}<small> SKU</small></b><em>{seriesStats.filter((item) => item.name !== "未分类").length} 个系列</em>
       </button>
       {seriesStats.map((item) => <button className={`series-card ${series === item.name ? "active" : ""}`} key={item.name} onClick={() => setSeries(item.name)} aria-pressed={series === item.name}>
-        <span>{item.name}</span><b>{item.skuCount}<small> SKU</small></b><em>库存 {item.stock} 件 · 预计利润 {money(item.profit)}</em>
+        <span>{item.name}</span><b>{item.skuCount}<small> SKU</small></b><em>可用 {item.available} 件{item.reserved > 0 ? ` · 集市占用 ${item.reserved}` : ""} · 预计利润 {money(item.profit)}</em>
       </button>)}
     </div>}
     <div className="filter-bar">
       <div className="search-box"><Icon name="search" size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索产品、系列或品类" /></div>
-      <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">全部状态</option>{Object.entries(STATUS).map(([key, val]) => <option value={key} key={key}>{val.label}</option>)}</select>
+      <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">全部状态</option>{Object.entries(STATUS).filter(([key]) => key !== "ready").map(([key, val]) => <option value={key} key={key}>{val.label}</option>)}</select>
       <select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">全部制作方式</option><option value="self">可独立制作</option><option value="factory">厂家生产</option><option value="risk">只看时间风险</option><option value="profitable">只看预计盈利</option></select>
       <select value={sort} onChange={(e) => setSort(e.target.value)}><option value="priority">按优先级</option><option value="deadline">按截止时间</option><option value="profit">按预计利润</option><option value="progress">按完成进度</option></select>
     </div>
     {mode === "list" ? <><div className="product-table">
-      <div className="product-table-head"><span>产品 / 进度</span><span>投入成本</span><span>售价 / 毛利率</span><span>现金回本</span><span>排期</span><span /></div>
-      {filtered.map((p) => <ProductRow key={p.id} product={p} dailyHours={dailyHours} onEdit={onOpenProduct} onDuplicate={onDuplicate} onDelete={onDelete} />)}
-      {!filtered.length && <div className="empty-list"><span>没有找到符合条件的产品</span><button onClick={() => { setQuery(""); setStatus("all"); setSeries("all"); setFilter("all"); }}>清除筛选</button></div>}
+      <div className="product-table-head"><span>产品 / 进度</span><span>可用库存</span><span>投入成本</span><span>售价 / 毛利率</span><span>现金回本</span><span>排期</span><span /></div>
+      {filtered.map((p) => <ProductRow key={p.id} product={p} dailyHours={dailyHours} reservations={reservations} onEdit={onOpenProduct} onDuplicate={onDuplicate} onDelete={onDelete} />)}
+      {!filtered.length && <div className="empty-list"><span>没有找到符合条件的产品</span><button onClick={() => { setQuery(""); setStatus("all"); setSeries("all"); setCatalogFilter("all"); setFilter("all"); }}>清除筛选</button></div>}
     </div>
-    <div className="mobile-product-list">{filtered.map((p) => <ProductCard key={p.id} product={p} dailyHours={dailyHours} onEdit={onOpenProduct} />)}</div></> : <SeriesBoard products={baseFiltered} seriesNames={seriesStats.map((item) => item.name)} onOpenProduct={onOpenProduct} onMoveSeries={onMoveSeries} />}
+    <div className="mobile-product-list">{filtered.map((p) => <ProductCard key={p.id} product={p} dailyHours={dailyHours} reservations={reservations} onEdit={onOpenProduct} />)}</div></> : <SeriesBoard products={baseFiltered} seriesNames={seriesStats.map((item) => item.name)} reservations={reservations} onOpenProduct={onOpenProduct} onMoveSeries={onMoveSeries} />}
+  </section>;
+}
+
+function AllSkuCatalog({ products, markets, onOpenProduct, onNavigate }) {
+  const [query, setQuery] = useState("");
+  const [pool, setPool] = useState("all");
+  const [series, setSeries] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("series");
+  const reservations = useMemo(() => getReservedInventory(markets), [markets]);
+  const skuProducts = useMemo(() => products.filter(isSkuProduct), [products]);
+  const seriesOptions = useMemo(() => [...new Set(skuProducts.map(productSeries))].sort((a, b) => a.localeCompare(b, "zh-CN")), [skuProducts]);
+  const filtered = useMemo(() => skuProducts.filter((product) => {
+    const matchesQuery = product.name.toLowerCase().includes(query.toLowerCase()) || productSeries(product).toLowerCase().includes(query.toLowerCase()) || product.category.includes(query);
+    const matchesPool = pool === "all" || (pool === "restock" && product.status === "ready") || (pool === "development" && product.status !== "ready");
+    return matchesQuery && matchesPool && (series === "all" || productSeries(product) === series) && (status === "all" || product.status === status);
+  }).sort((a, b) => {
+    if (sort === "stock") return getInventoryState(a, reservations).available - getInventoryState(b, reservations).available;
+    if (sort === "status") return STATUS[a.status].label.localeCompare(STATUS[b.status].label, "zh-CN");
+    return productSeries(a).localeCompare(productSeries(b), "zh-CN") || a.name.localeCompare(b.name, "zh-CN");
+  }), [skuProducts, query, pool, series, status, sort, reservations]);
+  const matureCount = skuProducts.filter((product) => product.status === "ready").length;
+  const availableTotal = skuProducts.reduce((sum, product) => sum + getInventoryState(product, reservations).available, 0);
+  const reservedTotal = skuProducts.reduce((sum, product) => sum + getInventoryState(product, reservations).reserved, 0);
+  return <section className="view sku-index-view">
+    <div className="view-title-row compact"><div className="title-block"><div className="issue-line"><span>MASTER INDEX</span><i /><em>{String(skuProducts.length).padStart(2, "0")} SKU</em></div><span className="section-kicker">ALL PRODUCTS / 总商品目录</span><h1>全部 SKU</h1><p>开发中与已完成生产的商品都保留在这里；每个 SKU 仍然只有一条数据。</p></div></div>
+    <DevelopmentTabs current="skus" onNavigate={onNavigate} />
+    <div className="sku-index-summary">
+      <article><small>全部商品</small><strong>{skuProducts.length}</strong><span>不含“不算 SKU”的创作记录</span></article>
+      <article><small>开发池</small><strong>{skuProducts.length - matureCount}</strong><span>想法、绘制、打样与生产中</span></article>
+      <article><small>补货池</small><strong>{matureCount}</strong><span>已经完成生产的成熟商品</span></article>
+      <article><small>可用 / 占用</small><strong>{availableTotal}<em> / {reservedTotal} 件</em></strong><span>占用来自计划中的集市</span></article>
+    </div>
+    <div className="sku-index-toolbar">
+      <div className="search-box"><Icon name="search" size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索 SKU、系列或品类" /></div>
+      <select value={pool} onChange={(event) => setPool(event.target.value)}><option value="all">全部池</option><option value="development">开发池</option><option value="restock">补货池</option></select>
+      <select value={series} onChange={(event) => setSeries(event.target.value)}><option value="all">全部系列</option>{seriesOptions.map((item) => <option value={item} key={item}>{item}</option>)}</select>
+      <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">全部状态</option>{Object.entries(STATUS).map(([key, item]) => <option value={key} key={key}>{item.label}</option>)}</select>
+      <select value={sort} onChange={(event) => setSort(event.target.value)}><option value="series">按系列</option><option value="status">按状态</option><option value="stock">按可用库存</option></select>
+    </div>
+    <div className="sku-master-table">
+      <div className="sku-master-head"><span>SKU</span><span>所在池 / 状态</span><span>系列 / 品类</span><span>可用库存</span><span>单件成本</span><span>售价</span><span /></div>
+      {filtered.map((product) => {
+        const inventory = getInventoryState(product, reservations);
+        const isMature = product.status === "ready";
+        return <article className={`sku-master-row ${isMature ? "mature" : "development"}`} key={product.id}>
+          <div className="sku-master-name"><small>{String(skuProducts.indexOf(product) + 1).padStart(3, "0")}</small><button onClick={() => onOpenProduct(product)}>{product.name}</button></div>
+          <div className="sku-master-state"><b className={isMature ? "restock" : "development"}>{isMature ? "补货池" : "开发池"}</b><span style={{ "--status": STATUS[product.status].color }}>{isMature && "✓ "}{STATUS[product.status].label}</span></div>
+          <div className="sku-master-series"><b>{productSeries(product)}</b><span>{product.category}</span></div>
+          <div className={`sku-master-stock ${inventory.reserved > 0 ? "reserved" : ""}`}><b>{inventory.available} 件</b><span>总数 {inventory.total}{inventory.reserved > 0 ? ` · 占用 ${inventory.reserved}` : ""}</span></div>
+          <div className="sku-master-money"><small>成本</small><b>{money(product.unitCost)}</b></div>
+          <div className="sku-master-money"><small>售价</small><b>{hasFinancialData(product) ? money(product.price) : "待补"}</b></div>
+          <button className="sku-master-edit" onClick={() => onOpenProduct(product)}><Icon name="edit" size={14} /><span>编辑</span></button>
+        </article>;
+      })}
+      {!filtered.length && <div className="restock-empty"><b>没有符合条件的 SKU</b><span>可以清除搜索词，或切换系列和状态筛选。</span></div>}
+    </div>
+  </section>;
+}
+
+function RestockPool({ products, markets, onOpenProduct, onNavigate }) {
+  const [query, setQuery] = useState("");
+  const [scope, setScope] = useState("all");
+  const reservations = useMemo(() => getReservedInventory(markets), [markets]);
+  const matureProducts = useMemo(() => products
+    .filter((product) => product.status === "ready" && isSkuProduct(product))
+    .map((product) => {
+      const inventory = getInventoryState(product, reservations);
+      const threshold = number(product.restockThreshold ?? 5);
+      const target = Math.max(threshold, number(product.restockTarget ?? product.plannedQty));
+      const suggestedQty = Math.max(0, target - inventory.available);
+      return { product, inventory, threshold, target, suggestedQty, needsRestock: inventory.available <= threshold };
+    })
+    .sort((a, b) => Number(b.needsRestock) - Number(a.needsRestock) || a.inventory.available - b.inventory.available || a.product.name.localeCompare(b.product.name, "zh-CN")), [products, reservations]);
+  const visible = matureProducts.filter((item) => {
+    const matchesQuery = item.product.name.toLowerCase().includes(query.toLowerCase()) || productSeries(item.product).toLowerCase().includes(query.toLowerCase()) || item.product.category.includes(query);
+    const matchesScope = scope === "all" || (scope === "needs" && item.needsRestock) || (scope === "healthy" && !item.needsRestock);
+    return matchesQuery && matchesScope;
+  });
+  const needsCount = matureProducts.filter((item) => item.needsRestock).length;
+  const availableTotal = matureProducts.reduce((sum, item) => sum + item.inventory.available, 0);
+  const reservedTotal = matureProducts.reduce((sum, item) => sum + item.inventory.reserved, 0);
+  const suggestedCost = matureProducts.reduce((sum, item) => sum + item.suggestedQty * number(item.product.unitCost), 0);
+  return <section className="view restock-view">
+    <div className="view-title-row compact"><div className="title-block"><div className="issue-line"><span>REORDER DESK</span><i /><em>{String(matureProducts.length).padStart(2, "0")} MATURE SKU</em></div><span className="section-kicker">RESTOCK POOL / 成熟商品管理</span><h1>补货池</h1><p>已完成设计与生产的商品集中在这里，按可用库存判断下一批补货。</p></div></div>
+    <DevelopmentTabs current="restock" onNavigate={onNavigate} />
+    <div className="restock-summary">
+      <article><small>成熟商品</small><strong>{matureProducts.length}<em> SKU</em></strong><span>制作状态为“已完成生产”</span></article>
+      <article className={needsCount > 0 ? "alert" : ""}><small>达到补货线</small><strong>{needsCount}<em> 个</em></strong><span>{needsCount ? "优先检查低库存商品" : "当前库存都在提醒线以上"}</span></article>
+      <article><small>当前可用</small><strong>{availableTotal}<em> 件</em></strong><span>{reservedTotal > 0 ? `另有 ${reservedTotal} 件被集市占用` : "暂无集市占用"}</span></article>
+      <article><small>建议补货成本</small><strong>{money(suggestedCost)}</strong><span>补到每个商品的目标库存</span></article>
+    </div>
+    <div className="restock-toolbar">
+      <div className="search-box"><Icon name="search" size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索成熟商品或系列" /></div>
+      <div className="restock-segment"><button className={scope === "all" ? "active" : ""} onClick={() => setScope("all")}>全部 {matureProducts.length}</button><button className={scope === "needs" ? "active" : ""} onClick={() => setScope("needs")}>待补货 {needsCount}</button><button className={scope === "healthy" ? "active" : ""} onClick={() => setScope("healthy")}>库存正常 {matureProducts.length - needsCount}</button></div>
+    </div>
+    <div className="restock-grid">
+      {visible.map((item) => {
+        const stockProgress = item.target > 0 ? Math.min(100, (item.inventory.available / item.target) * 100) : 100;
+        return <article className={`restock-card ${item.needsRestock ? "needs" : "healthy"}`} key={item.product.id}>
+          <header><span>✓ 已完成生产</span><em>{item.needsRestock ? item.inventory.available === 0 ? "缺货" : "待补货" : "库存正常"}</em></header>
+          <div className="restock-identity"><small>{productSeries(item.product)} / {item.product.category}</small><h2>{item.product.name}</h2></div>
+          <div className="restock-level"><div><span>可用 {item.inventory.available} 件</span><b>目标 {item.target} 件</b></div><div><i style={{ width: `${stockProgress}%` }} /></div></div>
+          <div className="restock-numbers"><span><small>总库存</small><b>{item.inventory.total} 件</b></span><span><small>集市占用</small><b>{item.inventory.reserved} 件</b></span><span><small>提醒线</small><b>{item.threshold} 件</b></span></div>
+          <footer><div><small>建议补货</small><b>{item.suggestedQty} 件 · {money(item.suggestedQty * number(item.product.unitCost))}</b></div><button onClick={() => onOpenProduct(item.product)}>更新库存</button></footer>
+        </article>;
+      })}
+      {!visible.length && <div className="restock-empty"><b>{matureProducts.length ? "没有符合筛选的成熟商品" : "补货池还是空的"}</b><span>{matureProducts.length ? "换一个筛选条件试试。" : "在产品编辑中把制作状态改成“已完成生产”，商品就会自动移到这里。"}</span></div>}
+    </div>
   </section>;
 }
 
 function Planner({ products, dailyHours, setDailyHours, globalDeadline, setGlobalDeadline, onOpenProduct, onNavigate }) {
   const [horizon, setHorizon] = useState(7);
-  const active = useMemo(() => products.map((p) => ({ product: p, ...getMetrics(p, dailyHours) })).filter((d) => !["ready", "paused"].includes(d.product.status)).sort((a, b) => {
-    const r = { late: 3, tight: 2, safe: 1 };
+  const active = useMemo(() => products.filter(isSkuProduct).map((p) => ({ product: p, ...getMetrics(p, dailyHours) })).filter((d) => !["ready", "paused"].includes(d.product.status)).sort((a, b) => {
+    const r = { pending: 4, late: 3, tight: 2, safe: 1 };
     return (r[b.risk] - r[a.risk]) || b.product.priority - a.product.priority || a.daysLeft - b.daysLeft;
   }), [products, dailyHours]);
   const capacity = dailyHours * horizon;
@@ -690,17 +990,19 @@ function MarketBook({ markets, products, onOpenMarket, onDeleteMarket }) {
   </section>;
 }
 
-function MarketEditor({ market, products, onClose, onSave, onDelete }) {
+function MarketEditor({ market, markets, products, onClose, onSave, onDelete }) {
   const [draft, setDraft] = useState(() => JSON.parse(JSON.stringify(market || EMPTY_MARKET)));
   const isNew = !market?.id;
   const metrics = getMarketMetrics(draft);
+  const otherReservations = useMemo(() => getReservedInventory(markets, market?.id), [markets, market?.id]);
   const update = (key, value) => setDraft((prev) => ({ ...prev, [key]: value }));
   const updateSale = (id, key, value) => setDraft((prev) => ({ ...prev, sales: prev.sales.map((row) => row.id === id ? { ...row, [key]: value } : row) }));
   const updateExpense = (id, key, value) => setDraft((prev) => ({ ...prev, expenses: prev.expenses.map((row) => row.id === id ? { ...row, [key]: value } : row) }));
   const addProduct = (productId) => {
     const product = products.find((item) => item.id === productId);
     if (!product || draft.sales.some((row) => row.productId === product.id)) return;
-    setDraft((prev) => ({ ...prev, sales: [...prev.sales, { id: `sale-${Date.now()}`, productId: product.id, productName: product.name, productSeries: productSeries(product), broughtQty: product.stock || product.plannedQty || 0, newQty: 0, soldQty: 0, giftQty: 0, eventPrice: product.price, revenueOverride: "", unitCost: product.unitCost }] }));
+    const available = getInventoryState(product, otherReservations).available;
+    setDraft((prev) => ({ ...prev, sales: [...prev.sales, { id: `sale-${Date.now()}`, productId: product.id, productName: product.name, productSeries: productSeries(product), broughtQty: available, newQty: 0, soldQty: 0, giftQty: 0, eventPrice: product.price, revenueOverride: "", unitCost: product.unitCost }] }));
   };
   const addExpense = () => setDraft((prev) => ({ ...prev, expenses: [...prev.expenses, { id: `expense-${Date.now()}`, category: "其他", label: "", amount: 0, kind: "direct", useCount: 1 }] }));
   const submit = (event) => {
@@ -721,20 +1023,26 @@ function MarketEditor({ market, products, onClose, onSave, onDelete }) {
           <NumberField label="订单数" value={draft.orders} onChange={(value) => update("orders", value)} suffix="单" />
         </div>
 
-        <div className="form-section-title market-section-title"><span>01 / 产品销售</span><i /><select value="" onChange={(e) => { addProduct(e.target.value); e.target.value = ""; }}><option value="">＋ 从产品池添加</option>{products.filter((product) => !draft.sales.some((row) => row.productId === product.id)).map((product) => <option value={product.id} key={product.id}>【{productSeries(product)}】{product.name}</option>)}</select></div>
+        <div className="form-section-title market-section-title"><span>01 / 产品销售</span><i /><select value="" onChange={(e) => { addProduct(e.target.value); e.target.value = ""; }}><option value="">＋ 从产品池添加</option>{products.filter((product) => isSkuProduct(product) && !draft.sales.some((row) => row.productId === product.id)).map((product) => <option value={product.id} key={product.id}>【{productSeries(product)}】{product.name} · 可用 {getInventoryState(product, otherReservations).available} 件</option>)}</select></div>
         <div className="sale-entry-list">
-          {draft.sales.map((row) => <div className="sale-entry" key={row.id}>
+          {draft.sales.map((row) => {
+            const product = products.find((item) => item.id === row.productId);
+            const availableBeforeMarket = getInventoryState(product, otherReservations).available;
+            const reservedFromStock = Math.max(0, number(row.broughtQty) - number(row.newQty));
+            const remainingAfterSave = availableBeforeMarket - reservedFromStock;
+            return <div className="sale-entry" key={row.id}>
             <div className="sale-entry-head"><b>{row.productSeries && <small>{row.productSeries}</small>}{row.productName}</b><button type="button" onClick={() => update("sales", draft.sales.filter((item) => item.id !== row.id))}><Icon name="close" size={14} /></button></div>
             <div className="sale-entry-grid">
               <MiniNumber label="带去" value={row.broughtQty} onChange={(v) => updateSale(row.id, "broughtQty", v)} />
               <MiniNumber label="本场新制" value={row.newQty} onChange={(v) => updateSale(row.id, "newQty", v)} />
               <MiniNumber label="售出" value={row.soldQty} onChange={(v) => updateSale(row.id, "soldQty", v)} />
               <MiniNumber label="赠品/损耗" value={row.giftQty} onChange={(v) => updateSale(row.id, "giftQty", v)} />
-              <MiniNumber label="单件成本" value={row.unitCost} onChange={(v) => updateSale(row.id, "unitCost", v)} prefix="¥" step="0.1" />
-              <MiniNumber label="本场售价" value={row.eventPrice} onChange={(v) => updateSale(row.id, "eventPrice", v)} prefix="¥" step="0.1" />
-              <div className="mini-number revenue-override"><label>实际销售额 <em>可选</em></label><div><span>¥</span><input type="number" min="0" step="0.1" value={row.revenueOverride} placeholder={String(number(row.soldQty) * number(row.eventPrice))} onFocus={(e) => e.target.select()} onChange={(e) => updateSale(row.id, "revenueOverride", e.target.value === "" ? "" : number(e.target.value))} /></div></div>
+              <MiniNumber label="单件成本" value={row.unitCost} onChange={(v) => updateSale(row.id, "unitCost", v)} prefix="¥" step="0.01" />
+              <MiniNumber label="本场售价" value={row.eventPrice} onChange={(v) => updateSale(row.id, "eventPrice", v)} prefix="¥" step="0.01" />
+              <div className="mini-number revenue-override"><label>实际销售额 <em>可选</em></label><div><span>¥</span><input type="number" inputMode="decimal" min="0" step="0.01" value={row.revenueOverride} placeholder={String(number(row.soldQty) * number(row.eventPrice))} onFocus={(e) => e.target.select()} onChange={(e) => updateSale(row.id, "revenueOverride", e.target.value === "" ? "" : number(e.target.value))} /></div></div>
             </div>
-          </div>)}
+            {draft.status === "planning" ? <p className={`sale-stock-note ${remainingAfterSave < 0 ? "shortage" : ""}`}>产品池当前可用 {availableBeforeMarket} 件 · 保存后{remainingAfterSave < 0 ? `超出库存 ${Math.abs(remainingAfterSave)} 件` : `剩余 ${remainingAfterSave} 件`}{number(row.newQty) > 0 && `（本场新制 ${number(row.newQty)} 件不占用原库存）`}</p> : <p className="sale-stock-note">结算后将按本场新制、售出及赠品/损耗自动更新库存。</p>}
+          </div>})}
           {!draft.sales.length && <div className="editor-empty-row">从产品池添加本场带去的商品，再填写售出数量。</div>}
         </div>
 
@@ -743,7 +1051,7 @@ function MarketEditor({ market, products, onClose, onSave, onDelete }) {
           {draft.expenses.map((expense) => <div className="expense-entry" key={expense.id}>
             <select value={expense.category} onChange={(e) => updateExpense(expense.id, "category", e.target.value)}>{EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select>
             <input value={expense.label} onChange={(e) => updateExpense(expense.id, "label", e.target.value)} placeholder="费用说明" />
-            <div className="expense-amount"><span>¥</span><input type="number" min="0" step="0.1" value={expense.amount} onFocus={(e) => e.target.select()} onChange={(e) => updateExpense(expense.id, "amount", e.target.value === "" ? "" : number(e.target.value))} /></div>
+            <div className="expense-amount"><span>¥</span><input type="number" inputMode="decimal" min="0" step="0.01" value={expense.amount} onFocus={(e) => e.target.select()} onChange={(e) => updateExpense(expense.id, "amount", e.target.value === "" ? "" : number(e.target.value))} /></div>
             <button type="button" className="expense-remove" onClick={() => update("expenses", draft.expenses.filter((item) => item.id !== expense.id))}><Icon name="trash" size={14} /></button>
           </div>)}
         </div>
@@ -757,7 +1065,7 @@ function MarketEditor({ market, products, onClose, onSave, onDelete }) {
           <div><small>售罄率 / 客单</small><b>{Math.round(metrics.sellThrough * 100)}% · {money(metrics.averageOrder)}</b><em>售出 {metrics.sold} / 带去 {metrics.brought}</em></div>
         </div>
 
-        <label className="inventory-sync"><input type="checkbox" checked={draft.syncInventory} onChange={(e) => update("syncInventory", e.target.checked)} /><span><b>保存时同步产品库存</b><small>扣除售出、赠品和损耗；再次编辑会按差额修正，不会重复扣减。</small></span></label>
+        <label className="inventory-sync"><input type="checkbox" checked={draft.syncInventory} onChange={(e) => update("syncInventory", e.target.checked)} /><span><b>结算后自动同步产品库存</b><small>计划中只占用“带去－本场新制”的数量；标记为已结算后，再按新制、售出和赠品/损耗更新真实库存。</small></span></label>
         <div className="field wide"><label>复盘备注</label><textarea rows="3" value={draft.notes} onChange={(e) => update("notes", e.target.value)} placeholder="记录人流、顾客反馈、畅销品和下次需要调整的地方" /></div>
         <footer className="editor-actions">{!isNew && <button type="button" className="text-danger" onClick={() => onDelete(market)}>删除集市</button>}<div><button type="button" className="secondary-btn" onClick={onClose}>取消</button><button type="submit" className="primary-btn">保存结算单</button></div></footer>
       </form>
@@ -766,7 +1074,7 @@ function MarketEditor({ market, products, onClose, onSave, onDelete }) {
 }
 
 function MiniNumber({ label, value, onChange, prefix, step = "1" }) {
-  return <div className="mini-number"><label>{label}</label><div>{prefix && <span>{prefix}</span>}<input type="number" min="0" step={step} value={value} onFocus={(e) => e.target.select()} onChange={(e) => onChange(e.target.value === "" ? "" : number(e.target.value))} /></div></div>;
+  return <div className="mini-number"><label>{label}</label><div>{prefix && <span>{prefix}</span>}<input type="number" inputMode={step === "1" ? "numeric" : "decimal"} min="0" step={step} value={value} onFocus={(e) => e.target.select()} onChange={(e) => onChange(e.target.value === "" ? "" : number(e.target.value))} /></div></div>;
 }
 
 function DataMenu({ products, markets, settings, onImport, onReset }) {
@@ -779,8 +1087,8 @@ function DataMenu({ products, markets, settings, onImport, onReset }) {
       type = "application/json";
       filename = `文创产品工作台备份-${new Date().toISOString().slice(0, 10)}.json`;
     } else if (format === "products") {
-      const header = ["产品", "系列", "品类", "状态", "优先级", "所需柄图", "已完成柄图", "绘制小时", "已投入小时", "生产等待天", "单件成本", "固定成本", "售价", "首批数量", "现有库存", "制作方式", "截止日期", "预计利润", "现金回本件数", "备注"];
-      const rows = products.map((p) => { const m = getMetrics(p, settings.dailyHours); return [p.name, productSeries(p), p.category, STATUS[p.status].label, p.priority, p.artNeeded, p.artDone, p.designHours, p.hoursDone, p.productionDays, p.unitCost, p.fixedCost, p.price, p.plannedQty, p.stock, p.selfMade ? "独立制作" : "厂家生产", p.deadline, m.profit, m.breakEvenUnits ?? "无法回本", p.notes]; });
+      const header = ["产品", "系列", "品类", "产品阶段", "本轮定位", "制作状态", "优先级", "所需柄图", "已完成柄图", "图稿方案", "绘制小时", "已投入小时", "生产等待天", "单件成本", "固定成本", "售价", "首批数量", "现有库存", "补货提醒线", "补货目标库存", "制作方式", "截止日期", "预计利润", "现金回本件数", "备注"];
+      const rows = products.map((p) => { const m = getMetrics(p, settings.dailyHours); return [p.name, productSeries(p), p.category, CATALOG_STAGE[productCatalogStage(p)].label, LAUNCH_PRIORITY[p.launchPriority] || "", STATUS[p.status].label, p.priority, p.artNeeded, p.artDone, p.artPlan || "", p.designHours, p.hoursDone, p.productionDays, p.unitCost, p.fixedCost, p.price, p.plannedQty, p.stock, p.restockThreshold ?? 5, p.restockTarget ?? p.plannedQty, p.selfMade ? "独立制作" : "厂家生产", p.deadline, isSkuProduct(p) ? m.profit : "不计入", isSkuProduct(p) ? m.breakEvenUnits ?? "无法回本" : "不计入", p.notes]; });
       const escape = (v) => `"${String(v ?? "").replaceAll('"', '""')}"`;
       content = "\uFEFF" + [header, ...rows].map((row) => row.map(escape).join(",")).join("\n");
       type = "text/csv;charset=utf-8";
@@ -882,7 +1190,16 @@ export default function Home() {
       const saved = localStorage.getItem(STORAGE_KEY);
       const savedMarkets = localStorage.getItem(MARKET_STORAGE_KEY);
       const settings = localStorage.getItem(SETTINGS_KEY);
-      if (saved) setProducts(JSON.parse(saved).map((product) => ({ ...product, series: typeof product.series === "string" ? product.series : "" })));
+      const startingProducts = saved ? JSON.parse(saved) : SAMPLE_PRODUCTS;
+      if (localStorage.getItem(CATALOG_MIGRATION_KEY)) {
+        setProducts(startingProducts.map(normalizeProduct));
+      } else {
+        const imported = mergeCatalogProducts(startingProducts);
+        setProducts(imported.products);
+        localStorage.setItem(CATALOG_MIGRATION_KEY, "done");
+        setToast("产品清单已补录，并按阶段完成分类");
+        window.setTimeout(() => setToast(""), 3200);
+      }
       if (savedMarkets) setMarkets(JSON.parse(savedMarkets));
       if (settings) { const parsed = JSON.parse(settings); setDailyHours(parsed.dailyHours ?? 2); setGlobalDeadline(parsed.globalDeadline ?? "2026-09-25"); }
     } catch {}
@@ -895,7 +1212,10 @@ export default function Home() {
   const notify = (message) => { setToast(message); window.setTimeout(() => setToast(""), 2200); };
   const saveProduct = (product) => {
     setProducts((list) => list.some((p) => p.id === product.id) ? list.map((p) => p.id === product.id ? product : p) : [product, ...list]);
-    setEditorProduct(undefined); notify("产品已保存");
+    setEditorProduct(undefined);
+    if (product.status === "ready" && view === "products") { setView("restock"); notify("产品已保存并移入补货池"); }
+    else if (product.status !== "ready" && view === "restock") { setView("products"); notify("产品已移回开发池"); }
+    else notify("产品已保存");
   };
   const deleteProduct = (product) => {
     if (window.confirm(`确定删除“${product.name}”吗？`)) { setProducts((list) => list.filter((p) => p.id !== product.id)); setEditorProduct(undefined); notify("产品已删除"); }
@@ -910,8 +1230,8 @@ export default function Home() {
   const saveMarket = (market) => {
     const previous = markets.find((item) => item.id === market.id);
     const previousDeductions = previous?.inventoryDeductions || {};
-    const nextDeductions = market.syncInventory ? (market.sales || []).reduce((result, row) => {
-      result[row.productId] = (result[row.productId] || 0) + number(row.soldQty) + number(row.giftQty);
+    const nextDeductions = market.status === "closed" && market.syncInventory ? (market.sales || []).reduce((result, row) => {
+      result[row.productId] = (result[row.productId] || 0) + number(row.soldQty) + number(row.giftQty) - number(row.newQty);
       return result;
     }, {}) : {};
     setProducts((list) => list.map((product) => ({ ...product, stock: number(product.stock) + number(previousDeductions[product.id]) - number(nextDeductions[product.id]) })));
@@ -929,14 +1249,15 @@ export default function Home() {
   const importData = (data) => {
     if (!Array.isArray(data.products)) { alert("备份文件中没有有效的产品数据。"); return; }
     if (!window.confirm(`将用备份中的 ${data.products.length} 个产品覆盖当前数据，是否继续？`)) return;
-    setProducts(data.products.map((product) => ({ ...product, series: typeof product.series === "string" ? product.series : "" })));
+    setProducts(data.products.map(normalizeProduct));
     if (Array.isArray(data.markets)) setMarkets(data.markets);
     if (data.settings) { setDailyHours(data.settings.dailyHours ?? 2); setGlobalDeadline(data.settings.globalDeadline ?? "2026-09-25"); }
     notify("备份已导入");
   };
-  const reset = () => { if (window.confirm("恢复示例数据会覆盖当前产品和集市账本。建议先导出备份，是否继续？")) { setProducts(SAMPLE_PRODUCTS); setMarkets([]); setDailyHours(2); setGlobalDeadline("2026-09-25"); notify("已恢复示例数据"); } };
+  const reset = () => { if (window.confirm("恢复示例数据会覆盖当前产品和集市账本。建议先导出备份，是否继续？")) { setProducts(mergeCatalogProducts(SAMPLE_PRODUCTS).products); setMarkets([]); setDailyHours(2); setGlobalDeadline("2026-09-25"); notify("已恢复示例数据与产品清单"); } };
   if (!loaded) return <div className="loading-screen"><span /></div>;
   const settings = { dailyHours, globalDeadline };
+  const skuCount = products.filter(isSkuProduct).length;
   const seriesOptions = [...new Set(products.map(productSeries).filter((series) => series !== "未分类"))].sort((a, b) => a.localeCompare(b, "zh-CN"));
   return <main className="app-shell">
     <aside className="sidebar">
@@ -944,7 +1265,7 @@ export default function Home() {
       <div className="edition-label"><span>WORKING EDITION</span><b>001</b><small>SEP · 2026</small></div>
       <nav>
         <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}><Icon name="grid" /><span>总览</span></button>
-        <button className={["products", "planner"].includes(view) ? "active" : ""} onClick={() => setView("products")}><Icon name="box" /><span>产品开发</span><em>{products.length}</em></button>
+        <button className={["skus", "products", "restock", "planner"].includes(view) ? "active" : ""} onClick={() => setView("skus")}><Icon name="box" /><span>产品 SKU</span><em>{skuCount}</em></button>
         <button className={view === "markets" ? "active" : ""} onClick={() => setView("markets")}><Icon name="receipt" /><span>集市账本</span><em>{markets.length}</em></button>
       </nav>
       <div className="privacy-note"><span className="privacy-dot" /><div><b>本机私密保存</b><small>数据不会上传到服务器</small></div></div>
@@ -957,14 +1278,16 @@ export default function Home() {
     </header>
     <div className="content">
       {view === "dashboard" && <Dashboard products={products} dailyHours={dailyHours} onOpenProduct={(p) => setEditorProduct(p || null)} onNavigate={setView} />}
-      {view === "products" && <ProductList products={products} dailyHours={dailyHours} onOpenProduct={(p) => setEditorProduct(p || null)} onDuplicate={duplicateProduct} onDelete={deleteProduct} onMoveSeries={moveProductSeries} onNavigate={setView} />}
+      {view === "skus" && <AllSkuCatalog products={products} markets={markets} onOpenProduct={(p) => setEditorProduct(p)} onNavigate={setView} />}
+      {view === "products" && <ProductList products={products} markets={markets} dailyHours={dailyHours} onOpenProduct={(p) => setEditorProduct(p || null)} onDuplicate={duplicateProduct} onDelete={deleteProduct} onMoveSeries={moveProductSeries} onNavigate={setView} />}
+      {view === "restock" && <RestockPool products={products} markets={markets} onOpenProduct={(p) => setEditorProduct(p)} onNavigate={setView} />}
       {view === "planner" && <Planner products={products} dailyHours={dailyHours} setDailyHours={setDailyHours} globalDeadline={globalDeadline} setGlobalDeadline={setGlobalDeadline} onOpenProduct={(p) => setEditorProduct(p)} onNavigate={setView} />}
       {view === "markets" && <MarketBook markets={markets} products={products} onOpenMarket={(market) => setEditorMarket(market || null)} onDeleteMarket={deleteMarket} />}
     </div>
     <button className="floating-add" onClick={() => view === "markets" ? setEditorMarket(null) : setEditorProduct(null)} aria-label={view === "markets" ? "新建集市" : "添加产品"}><Icon name="plus" /></button>
-    <nav className="bottom-nav"><button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}><Icon name="grid" /><span>总览</span></button><button className={["products", "planner"].includes(view) ? "active" : ""} onClick={() => setView("products")}><Icon name="box" /><span>产品开发</span></button><button className={view === "markets" ? "active" : ""} onClick={() => setView("markets")}><Icon name="receipt" /><span>集市账本</span></button></nav>
+    <nav className="bottom-nav"><button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}><Icon name="grid" /><span>总览</span></button><button className={["skus", "products", "restock", "planner"].includes(view) ? "active" : ""} onClick={() => setView("skus")}><Icon name="box" /><span>产品 SKU</span></button><button className={view === "markets" ? "active" : ""} onClick={() => setView("markets")}><Icon name="receipt" /><span>集市账本</span></button></nav>
     {editorProduct !== undefined && <ProductEditor product={editorProduct} seriesOptions={seriesOptions} onClose={() => setEditorProduct(undefined)} onSave={saveProduct} onDelete={deleteProduct} />}
-    {editorMarket !== undefined && <MarketEditor market={editorMarket} products={products} onClose={() => setEditorMarket(undefined)} onSave={saveMarket} onDelete={deleteMarket} />}
+    {editorMarket !== undefined && <MarketEditor market={editorMarket} markets={markets} products={products} onClose={() => setEditorMarket(undefined)} onSave={saveMarket} onDelete={deleteMarket} />}
     {toast && <div className="toast"><span>✓</span>{toast}</div>}
   </main>;
 }
