@@ -1,0 +1,8 @@
+{
+  "name": "alalei-product-studio-desktop",
+  "version": "1.0.0",
+  "description": "阿拉蕾的文创产品、库存与集市收益本地管理工具",
+  "author": "Alalei",
+  "private": true,
+  "main": "main.cjs"
+}

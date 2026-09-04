@@ -1,0 +1,58 @@
+name: Build Windows desktop installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "desktop/**"
+      - "desktop-app/**"
+      - "build/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.desktop.config.js"
+      - ".github/workflows/desktop-release.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer
+        run: npm run desktop:dist
+
+      - name: Keep installer as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Alalei-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish latest desktop installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view desktop-latest 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete desktop-latest --cleanup-tag --yes
+          }
+          $assets = Get-ChildItem release -Filter "*.exe" | ForEach-Object { $_.FullName }
+          gh release create desktop-latest @assets --target "${{ github.sha }}" --title "阿拉蕾文创工作台（Windows）" --notes "Windows 64 位本地桌面安装版。数据只保存在这台电脑上；更新安装不会清除数据。"

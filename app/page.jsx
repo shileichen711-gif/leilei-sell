@@ -1080,6 +1080,7 @@ function MiniNumber({ label, value, onChange, prefix, step = "1" }) {
 function DataMenu({ products, markets, settings, onImport, onReset }) {
   const [open, setOpen] = useState(false);
   const input = useRef(null);
+  const isDesktop = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("desktop") === "1";
   const download = (format) => {
     let content, type, filename;
     if (format === "json") {
@@ -1111,7 +1112,7 @@ function DataMenu({ products, markets, settings, onImport, onReset }) {
     event.target.value = ""; setOpen(false);
   };
   return <div className="data-menu-wrap"><button className="ghost-icon" onClick={() => setOpen(!open)} aria-label="数据与备份"><Icon name="more" /></button>{open && <div className="data-menu">
-    <div className="data-menu-title"><b>数据与备份</b><span>数据仅保存在当前浏览器</span></div>
+    <div className="data-menu-title"><b>数据与备份</b><span>{isDesktop ? "数据仅保存在这台电脑" : "数据仅保存在当前浏览器"}</span></div>
     <button onClick={() => download("json")}><Icon name="download" />导出完整备份</button>
     <button onClick={() => download("products")}><Icon name="download" />导出产品目录 CSV</button>
     <button onClick={() => download("markets")}><Icon name="download" />导出集市收益 CSV</button>
@@ -1125,8 +1126,10 @@ function DesktopInstall({ onNotify }) {
   const [promptEvent, setPromptEvent] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [installed, setInstalled] = useState(false);
+  const isDesktop = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("desktop") === "1";
 
   useEffect(() => {
+    if (isDesktop) return undefined;
     const updateInstalled = () => setInstalled(window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true);
     const rememberPrompt = (event) => {
       event.preventDefault();
@@ -1148,8 +1151,9 @@ function DesktopInstall({ onNotify }) {
       window.removeEventListener("appinstalled", completeInstall);
       displayMode.removeEventListener?.("change", updateInstalled);
     };
-  }, []);
+  }, [isDesktop]);
 
+  if (isDesktop) return <span className="desktop-installed"><i />本机桌面版</span>;
   if (installed) return <span className="desktop-installed"><i />桌面版已安装</span>;
   const install = async () => {
     if (!promptEvent) {

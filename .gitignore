@@ -2,6 +2,9 @@
 node_modules/
 out/
 dist/
+desktop-dist/
+desktop-app/renderer/
+release/
 .vinext/
 .wrangler/
 next-env.d.ts

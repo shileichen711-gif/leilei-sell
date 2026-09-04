@@ -6,19 +6,60 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "start": "vinext start"
-  },
-  "dependencies": {
-    "next": "^16.1.6",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "react-server-dom-webpack": "^19.2.6"
+    "start": "vinext start",
+    "desktop:renderer": "vite build --config vite.desktop.config.js",
+    "desktop:open": "npm run desktop:renderer && electron desktop-app",
+    "desktop:dist": "npm run desktop:renderer && electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "latest",
     "@vitejs/plugin-rsc": "^0.5.27",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "next": "^16.1.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-server-dom-webpack": "^19.2.6",
     "vinext": "latest",
     "vite": "^8.0.16",
     "wrangler": "latest"
+  },
+  "build": {
+    "appId": "com.alalei.productstudio",
+    "productName": "阿拉蕾文创工作台",
+    "artifactName": "Alalei-Product-Studio-Setup-${version}.${ext}",
+    "asar": true,
+    "directories": {
+      "app": "desktop-app",
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "renderer/**/*",
+      "main.cjs",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "阿拉蕾文创工作台",
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "zh_CN"
+      ]
+    }
   }
 }
