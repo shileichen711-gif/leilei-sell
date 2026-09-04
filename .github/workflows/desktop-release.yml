@@ -54,5 +54,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release delete desktop-latest --cleanup-tag --yes
           }
-          $assets = Get-ChildItem release -Filter "*.exe" | ForEach-Object { $_.FullName }
-          gh release create desktop-latest @assets --target "${{ github.sha }}" --title "阿拉蕾文创工作台（Windows）" --notes "Windows 64 位本地桌面安装版。数据只保存在这台电脑上；更新安装不会清除数据。"
+          $asset = (Get-ChildItem release -Filter "*.exe" | Select-Object -First 1).Name
+          Push-Location release
+          gh release create desktop-latest $asset --target "${{ github.sha }}" --title "阿拉蕾文创工作台（Windows）" --notes "Windows 64 位本地桌面安装版。数据只保存在这台电脑上；更新安装不会清除数据。"
+          Pop-Location
